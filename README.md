@@ -116,6 +116,12 @@ WardrobeXI/
   [Stylist](https://github.com/ThornyFFXI/Stylist)'s `modelinfo.xml`.
 - Built on the [Ashita](https://www.ashitaxi.com/) addon framework.
 
-## License
+## Support
 
-MIT. Created by **rockerudon**.
+If WardrobeXI is useful to you, you can support development here:
+
+<a href="https://www.buymeacoffee.com/rockmizx" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50" width="210"></a>
+
+---
+
+Created by **rockerudon**. Released under the MIT License (see `LICENSE`).
