@@ -1,0 +1,11 @@
+# Runtime / debug output
+look_dump.txt
+
+# Per-character settings are written by Ashita under config/, not here, but
+# ignore any stray local settings just in case.
+settings.lua
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
