@@ -12,7 +12,6 @@ lockstyle concept.
 This is a **client-side visual change only**. It does not affect your real gear,
 stats, server state, or how other players see you.
 
-![Tabs: Actor, Designs, Automation](docs/screenshot.png)
 
 ## Features
 
