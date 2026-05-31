@@ -448,6 +448,42 @@ local function serialize_target(t)
     return table.concat(parts, ',');
 end
 
+--[[
+* Resolves the live Actor set into concrete values, replacing "keep" (-1) with
+* what the player actually has on (real race/face and the real equipped item id
+* per slot). Used by Copy / Add Design so the FULL current look is captured,
+* not only the slots that were explicitly overridden.
+* Returns { race, face, equip[8] }.
+--]]
+local function resolve_live_set(s, appearance)
+    local set = T{ equip = T{} };
+
+    local sr = s.style.race[1];
+    set.race = (sr ~= nil and sr >= 0) and sr or (appearance.get_real_race() or -1);
+
+    local sf = s.style.face[1];
+    set.face = (sf ~= nil and sf >= 0) and sf or (appearance.get_real_face() or -1);
+
+    for i = 1, 8 do
+        local v = s.style.equip[i];
+        if (v ~= nil and v >= 0) then
+            set.equip[i] = v;                 -- explicit override item id (or 0 = none)
+        else
+            set.equip[i] = appearance.get_equipped_item_id(i) or 0;  -- real equipped item
+        end
+    end
+    return set;
+end
+
+-- Serializes a resolved set table { race, face, equip[8] } to a string.
+local function serialize_set(set)
+    local parts = T{ 'WXI1', tostring(set.race), tostring(set.face) };
+    for i = 1, 8 do
+        parts:append(tostring(set.equip[i]));
+    end
+    return table.concat(parts, ',');
+end
+
 -- Parses a serialized set into { race, face, equip[8] } or nil.
 local function deserialize_set(text)
     if (text == nil) then return nil; end
@@ -493,9 +529,10 @@ local function render_player_tab(s, appearance)
 
     -- Header buttons: copy / paste / save-as-design.
     if (imgui.Button('Copy', { 70, 0 })) then
-        imgui.SetClipboardText(serialize_target(t));
+        -- Copy the FULL current look (overrides + actually-equipped items).
+        imgui.SetClipboardText(serialize_set(resolve_live_set(s, appearance)));
     end
-    if (imgui.IsItemHovered()) then imgui.SetTooltip('Copy the current set to the clipboard.'); end
+    if (imgui.IsItemHovered()) then imgui.SetTooltip('Copy the current set (including equipped items) to the clipboard.'); end
     imgui.SameLine();
     if (imgui.Button('Paste', { 70, 0 })) then
         local set = deserialize_set(imgui.GetClipboardText());
@@ -510,7 +547,7 @@ local function render_player_tab(s, appearance)
     if (imgui.IsItemHovered()) then imgui.SetTooltip('Apply a set from the clipboard.'); end
     imgui.SameLine();
     if (imgui.Button('Add Design', { 110, 0 })) then
-        -- Save current set as a new auto-named design.
+        -- Save the FULL current look (overrides + equipped items) as a new design.
         local base = 'New Design';
         local name = base;
         local n = 1;
@@ -518,7 +555,10 @@ local function render_player_tab(s, appearance)
             n = n + 1;
             name = base .. ' ' .. n;
         end
-        designs.save(s, name);
+        local set = resolve_live_set(s, appearance);
+        local d = T{ name = name, race = set.race, face = set.face, equip = T{} };
+        for i = 1, 8 do d.equip[i] = set.equip[i]; end
+        table.insert(s.designs, d);
         settings.save();
     end
     if (imgui.IsItemHovered()) then imgui.SetTooltip('Save the current set as a new design.'); end

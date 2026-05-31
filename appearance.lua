@@ -391,6 +391,25 @@ function appearance.set_style(s)
 end
 
 --[[
+* Applies FFXI's "full body" rule in place to an equip-model array (1..8).
+* When the BODY model number (model % 0x1000) is >= 256, the game renders it as
+* a full outfit and forces hands/legs/feet to that same number in their own
+* slot ranges (Hands 0x3000, Legs 0x4000, Feet 0x5000). Replicating this stops
+* multi-slot gear (e.g. Kupo/Moogle Suit) from clipping with the bare body.
+--]]
+local function apply_fullbody_rule(equip)
+    local body_model = equip[2];
+    if (body_model ~= nil and body_model >= 0) then
+        local body_number = body_model % 0x1000;
+        if (body_number >= 256) then
+            equip[3] = 0x3000 + body_number;  -- Hands
+            equip[4] = 0x4000 + body_number;  -- Legs
+            equip[5] = 0x5000 + body_number;  -- Feet
+        end
+    end
+end
+
+--[[
 * Resolves the configured style into concrete values, filling "keep real" (-1)
 * slots from the authoritative real appearance (equipped items / entity). Race
 * and face fall back to the live entity; equipment falls back to the model of
@@ -412,18 +431,27 @@ local function resolve_style()
 
     -- Equip values are ITEM IDS: -1 = keep real, 0 = none/empty, >0 = item id.
     -- We convert to the visual model only here, at apply time.
+    --
+    -- For "keep" slots we derive the model from the ACTUALLY-EQUIPPED item
+    -- (read from the inventory, which is independent of the rendered look), not
+    -- from the cached rendered model. The rendered cache carries the full-body
+    -- hiding of whatever body was on before, so reusing it would make slots
+    -- vanish when the body changes. The full-body rule below re-derives the
+    -- hidden slots from the FINAL body, which is the correct behaviour.
     local have_cache = (real_cache.equip ~= nil);
     for i = 1, 8 do
         local v = style.equip[i];
         if (v == nil or v < 0) then
-            -- Keep real: prefer the cached RENDERED model (accounts for
-            -- multi-slot gear hiding); fall back to the equipped item's model.
-            if (have_cache and real_cache.equip[i] ~= nil) then
-                values.equip[i] = real_cache.equip[i];
+            -- Keep real: model of the actually-equipped item (0 => bare slot).
+            local item_id = read_equipped_item_id(i);
+            if (item_id == nil) then
+                -- Inventory unavailable: best-effort fall back.
+                values.equip[i] = (have_cache and real_cache.equip[i]) or player.Look[LOOK_SLOTS[i]];
             else
-                local item_id = read_equipped_item_id(i);
-                local model   = appearance.item_to_model(i, item_id or 0);
-                values.equip[i] = model or player.Look[LOOK_SLOTS[i]];
+                local model = appearance.item_to_model(i, item_id);
+                values.equip[i] = model
+                    or (have_cache and real_cache.equip[i])
+                    or player.Look[LOOK_SLOTS[i]];
             end
         elseif (v == 0) then
             values.equip[i] = 4096 * i;  -- bare / empty slot
@@ -434,21 +462,7 @@ local function resolve_style()
         end
     end
 
-    -- FFXI "full body" rule: when the BODY model number (model % 0x1000) is
-    -- >= 256, the game renders it as a full outfit and forces the hands, legs
-    -- and feet slots to that same model number in their own slot ranges
-    -- (Hands 0x3000, Legs 0x4000, Feet 0x5000). Replicate that so multi-slot
-    -- gear (e.g. Kupo/Moogle Suit) does not clip with the bare base body.
-    local body_model = values.equip[2];
-    if (body_model ~= nil and body_model >= 0) then
-        local body_number = body_model % 0x1000;
-        if (body_number >= 256) then
-            values.equip[3] = 0x3000 + body_number;  -- Hands
-            values.equip[4] = 0x4000 + body_number;  -- Legs
-            values.equip[5] = 0x5000 + body_number;  -- Feet
-        end
-    end
-
+    apply_fullbody_rule(values.equip);
     return values;
 end
 
@@ -516,9 +530,10 @@ function appearance.apply_to_self(s)
 end
 
 --[[
-* Restores the player's real appearance. Uses the cached REAL rendered models
-* (which already account for multi-slot gear hiding, so no clipping) when
-* available, falling back to the per-item models from the inventory.
+* Restores the player's real appearance: each slot from the actually-equipped
+* item (independent of the rendered look), then the full-body rule re-derives
+* hidden slots from the final body. This avoids both clipping (multi-slot gear)
+* and vanishing slots when the body is changed.
 --]]
 function appearance.restore_self()
     local player = GetPlayerEntity();
@@ -532,15 +547,20 @@ function appearance.restore_self()
 
     local have_cache = (real_cache.equip ~= nil);
     for i = 1, 8 do
-        if (have_cache and real_cache.equip[i] ~= nil) then
-            values.equip[i] = real_cache.equip[i];
+        local item_id = read_equipped_item_id(i);
+        if (item_id == nil) then
+            values.equip[i] = (have_cache and real_cache.equip[i]) or player.Look[LOOK_SLOTS[i]];
         else
-            -- Fallback: derive from the individually-equipped item.
-            local item_id = read_equipped_item_id(i);
-            local model   = appearance.item_to_model(i, item_id or 0);
-            values.equip[i] = model or player.Look[LOOK_SLOTS[i]];
+            local model = appearance.item_to_model(i, item_id);
+            values.equip[i] = model
+                or (have_cache and real_cache.equip[i])
+                or player.Look[LOOK_SLOTS[i]];
         end
     end
+
+    -- Re-derive hidden slots from the final body so multi-slot gear neither
+    -- clips with the bare body nor leaves slots invisible.
+    apply_fullbody_rule(values.equip);
 
     return write_player_values(values);
 end

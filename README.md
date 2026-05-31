@@ -68,6 +68,10 @@ In the window:
 - **Automation**: enable it and **Add rule**. Each rule maps a main/sub job
   combination to a design. The active rule is highlighted while it applies.
 
+> The **Actor** tab is a live working state: on load it always detects your
+> real character (race, face, equipped gear), it is not saved. Only your
+> **Designs** and **Automation** rules persist between sessions.
+
 ## How it works
 
 WardrobeXI writes your character's model fields directly into the player entity

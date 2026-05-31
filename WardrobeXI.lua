@@ -128,11 +128,20 @@ end
 --========================================================================
 
 ashita.events.register('load', 'load_cb', function()
+    -- The Actor tab is a transient working state: it always starts by detecting
+    -- the player's real appearance. Only Designs and Automation persist. So we
+    -- reset the live override on load and never carry a saved override.
+    wardrobe.settings.style.enabled[1] = false;
+    wardrobe.settings.style.race[1] = -1;
+    wardrobe.settings.style.face[1] = -1;
+    for i = 1, 8 do
+        wardrobe.settings.style.equip[i] = -1;
+    end
+
     appearance.bind_settings(wardrobe.settings);
     appearance.initialize();
     ui.initialize(wardrobe.settings, appearance);
-    -- Re-apply a saved style on load.
-    apply_current_style();
+    -- No saved override is applied on load; the character keeps its real look.
 end);
 
 ashita.events.register('unload', 'unload_cb', function()
