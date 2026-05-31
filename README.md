@@ -12,7 +12,6 @@ lockstyle concept.
 This is a **client-side visual change only**. It does not affect your real gear,
 stats, server state, or how other players see you.
 
-
 ## Features
 
 - **Actor tab** – live editing of your current character: race, face, and the

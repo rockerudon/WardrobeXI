@@ -25,7 +25,6 @@ addon.link    = '';
 
 require('common');
 local chat       = require('chat');
-local imgui      = require('imgui');
 local settings   = require('settings');
 local appearance = require('appearance');
 local ui         = require('ui');

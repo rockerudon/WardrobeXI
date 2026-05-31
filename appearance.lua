@@ -23,7 +23,6 @@
 --]]
 
 require('common');
-local chat   = require('chat');
 local ffi    = require('ffi');
 local models = require('data.models');
 
@@ -56,6 +55,18 @@ local style = T{
     face    = -1,   -- hair/face byte
     equip   = T{ -1, -1, -1, -1, -1, -1, -1, -1, },
 };
+
+-- Cache of the last resolved style values (race/face/equip models). resolve_style
+-- reads the 8 equipped items from the inventory, which is wasteful to redo every
+-- frame. We recompute only when something changes (style edited, automation
+-- applied, or an appearance packet arrives) and otherwise reuse the cache. A
+-- periodic refresh is a cheap safety net for any change we did not explicitly
+-- flag. write_player_values still runs every frame so the override survives the
+-- game refreshing the model.
+local resolved_cache = nil;
+local resolved_dirty = true;
+local resolve_counter = 0;
+local RESOLVE_REFRESH_FRAMES = 30;  -- ~0.5s safety re-resolve at 60 FPS
 
 -- Cached REAL race/face/equip. Race/face/equip-models live in the entity,
 -- which we overwrite when applying an override. So we snapshot the real values
@@ -253,62 +264,6 @@ function appearance.item_name(slot, item_id)
     return nil;
 end
 
--- Reverse model->name map per slot, built alongside the item lists for display.
-local model_names = nil;
-
---[[
-* Returns a representative display name for an encoded model value in a slot
-* (used to label an explicit override). Returns 'None' for the bare model and a
-* generic 'Model N' for unknown values. Multiple items can share a model; this
-* returns one representative name.
---]]
-function appearance.model_name(slot, model)
-    if (model == nil or model < 0) then return nil; end
-    if (model == 4096 * slot) then return 'None'; end
-    build_slot_list(slot);
-    if (model_names == nil) then model_names = T{}; end
-    if (model_names[slot] == nil) then
-        local map = {};
-        local list = equip_lists[slot] or T{};
-        for _, item in ipairs(list) do
-            if (map[item.model] == nil) then
-                map[item.model] = item.name;
-            end
-        end
-        model_names[slot] = map;
-    end
-    local nm = model_names[slot][model];
-    if (nm ~= nil) then return nm; end
-    return ('Model %d'):fmt(model);
-end
-
--- Reverse model->item id map per slot (a representative item for an encoded
--- model), built lazily for icon display of explicit overrides.
-local model_items = nil;
-
---[[
-* Returns a representative item id for an encoded model value in a slot, or nil
-* (e.g. for the bare/empty model). Used to draw an icon for an explicit
-* equipment override.
---]]
-function appearance.model_item_id(slot, model)
-    if (model == nil or model < 0) then return nil; end
-    if (model == 4096 * slot) then return nil; end  -- bare slot, no item
-    build_slot_list(slot);
-    if (model_items == nil) then model_items = T{}; end
-    if (model_items[slot] == nil) then
-        local map = {};
-        local list = equip_lists[slot] or T{};
-        for _, item in ipairs(list) do
-            if (map[item.model] == nil) then
-                map[item.model] = item.id;
-            end
-        end
-        model_items[slot] = map;
-    end
-    return model_items[slot][model];
-end
-
 --========================================================================
 -- Detection getters used by the UI ("Player" view)
 --========================================================================
@@ -382,11 +337,23 @@ end
 * s.style = { enabled, race, face, equip[8] } (each a T{value}).
 --]]
 function appearance.set_style(s)
+    local changed = (style.enabled ~= s.style.enabled[1])
+        or (style.race ~= s.style.race[1])
+        or (style.face ~= s.style.face[1]);
+
     style.enabled = s.style.enabled[1];
     style.race    = s.style.race[1];
     style.face    = s.style.face[1];
     for i = 1, 8 do
-        style.equip[i] = s.style.equip[i] or -1;
+        local v = s.style.equip[i] or -1;
+        if (style.equip[i] ~= v) then
+            changed = true;
+        end
+        style.equip[i] = v;
+    end
+
+    if (changed) then
+        resolved_dirty = true;
     end
 end
 
@@ -467,6 +434,24 @@ local function resolve_style()
 end
 
 --[[
+* Returns the resolved style, reusing the cached result while it is still valid.
+* resolve_style reads the inventory's 8 equipped items, so we avoid redoing that
+* every frame: it only re-resolves when the cache was invalidated (style edited,
+* automation applied, appearance packet captured) or after a periodic refresh
+* that catches any change we did not explicitly flag (e.g. swapping gear in the
+* normal equipment screen).
+--]]
+local function resolve_style_cached()
+    resolve_counter = resolve_counter + 1;
+    if (resolved_dirty or resolved_cache == nil or resolve_counter >= RESOLVE_REFRESH_FRAMES) then
+        resolved_cache = resolve_style();
+        resolved_dirty = false;
+        resolve_counter = 0;
+    end
+    return resolved_cache;
+end
+
+--[[
 * Writes resolved values into the player entity and forces a refresh.
 --]]
 local function write_player_values(values)
@@ -524,7 +509,7 @@ function appearance.apply_to_self(s)
     appearance.set_style(s);
     if (not style.enabled) then return false; end
 
-    local values = resolve_style();
+    local values = resolve_style_cached();
     if (values == nil) then return false; end
     return write_player_values(values);
 end
@@ -585,6 +570,7 @@ function appearance.capture_real_from_packet(e)
         real_cache.race  = struct.unpack('B', e.data, 0x45 + 1);
         real_cache.equip = read_equip(0x46);
         persist_real();
+        resolved_dirty = true;
     elseif (e.id == 0x000D) then
         local party = AshitaCore:GetMemoryManager():GetParty();
         if (party == nil) then return; end
@@ -595,12 +581,14 @@ function appearance.capture_real_from_packet(e)
             real_cache.race  = struct.unpack('B', e.data, 0x49 + 1);
             real_cache.equip = read_equip(0x4A);
             persist_real();
+            resolved_dirty = true;
         end
     elseif (e.id == 0x0051) then
         real_cache.face  = struct.unpack('B', e.data, 0x04 + 1);
         real_cache.race  = struct.unpack('B', e.data, 0x05 + 1);
         real_cache.equip = read_equip(0x06);
         persist_real();
+        resolved_dirty = true;
     end
 end
 
@@ -614,7 +602,7 @@ function appearance.handle_packet(e)
 
     if (not style.enabled) then return; end
 
-    local values = resolve_style();
+    local values = resolve_style_cached();
     if (values == nil) then return; end
 
     -- Helper to write a uint16 equipment slot at a byte offset.
