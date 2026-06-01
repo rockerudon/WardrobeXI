@@ -104,13 +104,6 @@ WardrobeXI/
   data/models.lua   -- bundled item id -> equipment model lookup table
 ```
 
-## Compatibility
-
-- Requires Ashita v4.
-- Designed and tested on a private server (CatsEyeXI). Model ids come from the
-  retail-derived Stylist table; some custom-server items may not have a model
-  entry and will fall back to your live look.
-
 ## Credits
 
 - Inspired by [Glamourer](https://github.com/Ottermandias/Glamourer) (FFXIV).
