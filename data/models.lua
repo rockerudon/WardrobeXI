@@ -1,9 +1,6 @@
 --[[
 * WardrobeXI - equipment model lookup table.
 *
-* AUTO-GENERATED from Stylist modelinfo.xml by
-* tools/glamourer/convert_modelinfo.py. Do not edit by hand.
-*
 * Layout: models[slotIndex][itemId] = encodedModelValue, where
 * slotIndex is 1..8 (Head, Body, Hands, Legs, Feet, Main, Sub, Ranged)
 * and encodedModelValue = baseModel + 4096 * slotIndex.
