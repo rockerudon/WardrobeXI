@@ -27,6 +27,31 @@ local designs  = require('designs');
 
 local ui = T{};
 
+local function addons_imgui43()
+    local ok, addons = pcall(function()
+        return AshitaCore:GetPluginManager():Get('addons');
+    end);
+    if (not ok or addons == nil or addons.GetInterfaceVersion == nil) then
+        return false;
+    end
+    return (tonumber(addons:GetInterfaceVersion()) or 0) >= 4.3;
+end
+
+local IMGUI43 = addons_imgui43();
+local CHILD_BORDER = ImGuiChildFlags_Borders or 1;
+local CHILD_NONE = ImGuiChildFlags_None or 0;
+
+local function begin_child(id, size, border, window_flags)
+    if (IMGUI43) then
+        local child_flags = border and CHILD_BORDER or CHILD_NONE;
+        local ok, result = pcall(imgui.BeginChild, id, size, child_flags, window_flags or 0);
+        if (ok) then return result; end
+        ok, result = pcall(imgui.BeginChild, id, size, child_flags);
+        if (ok) then return result; end
+    end
+    return imgui.BeginChild(id, size, border, window_flags);
+end
+
 -- Race ids -> display names. FFXI uses these model race ids.
 local RACES = T{
     { id = 1,  name = 'Hume Male' },
@@ -358,7 +383,7 @@ local function render_equip_slot(t, appearance, index, slot_name)
         imgui.Separator();
 
         local filter = ctx.equip_search[index][1]:lower();
-        imgui.BeginChild('##wxi_scroll_' .. t.id .. '_' .. index, { 0, 280 }, false);
+        begin_child('##wxi_scroll_' .. t.id .. '_' .. index, { 0, 280 }, false);
 
         -- Keep row.
         local keep_label;
@@ -607,7 +632,7 @@ local function render_designs_tab(s, appearance)
     ctx.design_list_width = list_w;
 
     -- Left: design list with "+ New".
-    imgui.BeginChild('##wxi_design_list', { list_w, 0 }, true);
+    begin_child('##wxi_design_list', { list_w, 0 }, true);
     if (imgui.Button('+ New', { -1, 0 })) then
         local base = 'New Design';
         local name = base;
@@ -693,7 +718,7 @@ local function render_designs_tab(s, appearance)
     imgui.SameLine();
 
     -- Right: selected design editor.
-    imgui.BeginChild('##wxi_design_edit', { 0, 0 }, false);
+    begin_child('##wxi_design_edit', { 0, 0 }, false);
     local idx = ctx.selected_design;
     local d = s.designs[idx];
     if (d == nil) then
@@ -774,7 +799,7 @@ local function render_automation_tab(s, appearance)
     local main, sub = appearance.get_jobs();
 
     -- Status card: enable toggle + current job + which design is active.
-    imgui.BeginChild('##wxi_auto_status', { 0, 78 }, true);
+    begin_child('##wxi_auto_status', { 0, 78 }, true);
     local en = { auto.enabled[1] };
     if (imgui.Checkbox('Enable automation', en)) then
         auto.enabled[1] = en[1];
@@ -858,7 +883,7 @@ local function render_automation_tab(s, appearance)
         if (is_active) then
             imgui.PushStyleColor(ImGuiCol_Border, { 0.4, 1.0, 0.4, 0.8 });
         end
-        imgui.BeginChild('##rule_card', { 0, 90 }, true, bit.bor(ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse));
+        begin_child('##rule_card', { 0, 90 }, true, bit.bor(ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse));
 
         -- Row 1: up/down reorder + enabled toggle + active badge + delete.
         if (imgui.Button('^##up', { 24, 0 }) and i > 1) then

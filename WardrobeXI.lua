@@ -19,7 +19,7 @@
 
 addon.name    = 'WardrobeXI';
 addon.author  = 'rockerudon';
-addon.version = '0.1.0';
+addon.version = '0.2.0';
 addon.desc    = 'Visual lockstyle / appearance editor with an ImGui interface.';
 addon.link    = '';
 
